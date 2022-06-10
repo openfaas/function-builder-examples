@@ -6,27 +6,20 @@ import os
 import tarfile
 import hmac
 import requests
+import tempfile
 
-parser = argparse.ArgumentParser(description='Build a NodeJs function.')
-parser.add_argument('image', type=str)
-parser.add_argument('handler', type=str)
-
-args = parser.parse_args()
-
-handler = os.path.abspath(args.handler)
-
-def shrinkwrap(handler):
+def shrinkwrap(image, handler, lang):
     cmd = [
         "faas-cli",
         "build",
         "--lang",
-        "node17",
+        lang,
         "--handler",
         handler,
         "--name",
         "context",
         "--image",
-        args.image,
+        image,
         "--shrinkwrap"
     ]
 
@@ -34,6 +27,7 @@ def shrinkwrap(handler):
 
     if completed.returncode != 0:
         raise Exception('Failed to shrinkwrap handler')
+
 
 def makeTar(buildConfig, path, tarFile):
     configFile = os.path.join(path, 'com.openfaas.docker.config')
@@ -44,20 +38,38 @@ def makeTar(buildConfig, path, tarFile):
         tar.add(configFile, arcname='com.openfaas.docker.config')
         tar.add(os.path.join(path, "context"), arcname="context")
 
-buildConfig = { 'image': args.image }
-shrinkwrap(handler)
-makeTar(buildConfig, 'build', 'req.tar')
+parser = argparse.ArgumentParser(
+    description='Build a function with the OpenFaaS Pro Builder')
 
-with open('req.tar', 'rb') as t, open('payload.txt', 'rb') as s:
-    secret = s.read()
-    data = t.read()
-    digest = hmac.new(secret, data, 'sha256').hexdigest()
-    res = requests.post("http://127.0.0.1:8081/build", headers={'X-Build-Signature': 'sha256=%s'%digest, 'Content-Type': 'application/octet-stream'}, data=data)
+parser.add_argument('image', type=str,
+                    help="Docker image name to build")
+parser.add_argument('handler', type=str,
+                    help="Directory with handler for function, e.g. handler.js")
+parser.add_argument('--lang', type=str,
+                    help="Language or template to use, e.g. node17", required=True)
 
+args = parser.parse_args()
 
+handler = os.path.abspath(args.handler)
+buildConfig = {'image': args.image, 'buildArgs': {}}
+
+with tempfile.TemporaryDirectory() as tmpdir:
+    tarFile = os.path.join(tmpdir, 'req.tar')
+
+    shrinkwrap(args.image, handler, args.lang)
+    makeTar(buildConfig, 'build', tarFile)
+
+    with open(tarFile, 'rb') as t, open('payload.txt', 'rb') as s:
+        secret = s.read()
+        data = t.read()
+        digest = hmac.new(secret, data, 'sha256').hexdigest()
+        res = requests.post("http://127.0.0.1:8081/build", headers={
+                            'X-Build-Signature': 'sha256={}'.format(digest),
+                            'Content-Type': 'application/octet-stream'}, data=data)
+
+content = res.json()
 if res.status_code != 200:
-    print('Building image %s failed'%args.image)
+    print('Building image {} failed'.format(args.image))
+    print(content['status'])
 else:
-    content = res.json()
-    print('Success building image %s'%content['image'])
-
+    print('Success building image %s' % content['image'])
