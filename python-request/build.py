@@ -38,6 +38,17 @@ def makeTar(buildConfig, path, tarFile):
         tar.add(configFile, arcname='com.openfaas.docker.config')
         tar.add(os.path.join(path, "context"), arcname="context")
 
+def callBuilder(tarFile):
+    with open(tarFile, 'rb') as t, open('payload.txt', 'rb') as s:
+        secret = s.read()
+        data = t.read()
+        digest = hmac.new(secret, data, 'sha256').hexdigest()
+        headers = {
+            'X-Build-Signature': 'sha256={}'.format(digest),
+            'Content-Type': 'application/octet-stream'
+        }
+        return requests.post("http://127.0.0.1:8081/build", headers=headers, data=data)
+
 parser = argparse.ArgumentParser(
     description='Build a function with the OpenFaaS Pro Builder')
 
@@ -59,13 +70,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
     shrinkwrap(args.image, handler, args.lang)
     makeTar(buildConfig, 'build', tarFile)
 
-    with open(tarFile, 'rb') as t, open('payload.txt', 'rb') as s:
-        secret = s.read()
-        data = t.read()
-        digest = hmac.new(secret, data, 'sha256').hexdigest()
-        res = requests.post("http://127.0.0.1:8081/build", headers={
-                            'X-Build-Signature': 'sha256={}'.format(digest),
-                            'Content-Type': 'application/octet-stream'}, data=data)
+    res = callBuilder(tarFile) 
 
 content = res.json()
 if res.status_code != 200:
