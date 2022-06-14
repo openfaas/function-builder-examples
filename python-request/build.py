@@ -52,10 +52,10 @@ def callBuilder(tarFile):
 parser = argparse.ArgumentParser(
     description='Build a function with the OpenFaaS Pro Builder')
 
-parser.add_argument('image', type=str,
-                    help="Docker image name to build")
-parser.add_argument('handler', type=str,
-                    help="Directory with handler for function, e.g. handler.js")
+parser.add_argument('--image', type=str,
+                    help="Docker image name to build", required=True)
+parser.add_argument('--handler', type=str,
+                    help="Directory with handler for function, e.g. handler.js", required=True)
 parser.add_argument('--lang', type=str,
                     help="Language or template to use, e.g. node17", required=True)
 
