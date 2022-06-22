@@ -8,6 +8,11 @@ const tar = require('tar');
 const os = require('os');
 const path = require('path');
 
+if(process.argv.length < 5) {
+  console.log('Usage: node index.js <image> <handler> <lang>');
+  process.exit(-1)
+}
+
 const args = process.argv.slice(2);
 
 const image = args[0];

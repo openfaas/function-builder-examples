@@ -21,6 +21,7 @@ kubectl get secret \
 ```
 
 The directory [hello-world](./hello-world/) can be passed as the handler directory to the examples. It contains a javascript handler for a function. The hello-world directory was created by running:
+
 ```bash
 faas-cli new hello-world --lang node17
 ```
@@ -28,17 +29,19 @@ faas-cli new hello-world --lang node17
 You can use the `faas-cli` to create any other handler to try these example scripts with.
 
 ## Use Python to call the pro-builder
+
 The [python-request](./python-request/) directory has an example on how to invoke the Function Builder API from python. Run the `build.py` script with the required flags to turn a function handler into a container image.
 
 The python script uses the [Requests](https://requests.readthedocs.io/en/latest/) package so you will have to install that to run the example.
+
 ```
-python -m pip install requests
+sudo python3 -m pip install requests
 ```
 
 Run the script
 ```bash
 python3 python-request/build.py \
-    --image docker.io/functions/hello-world:0.1.0 \
+    --image ttl.sh/hello-world-python:1h \
     --handler ./hello-world \
     --lang node17
 ```
@@ -59,7 +62,7 @@ The script takes three arguments:
 
 ```bash
 node nodejs-request/index.js \
-    'docker.io/functions/hello-world:0.1.0' \
+    'ttl.sh/hello-world-node:1h'
     ./hello-world \
     node17
 ```
