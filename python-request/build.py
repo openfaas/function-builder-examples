@@ -39,10 +39,10 @@ def makeTar(buildConfig, path, tarFile):
         tar.add(os.path.join(path, "context"), arcname="context")
 
 def callBuilder(tarFile):
-    with open(tarFile, 'rb') as t, open('payload.txt', 'rb') as s:
-        secret = s.read()
+    with open(tarFile, 'rb') as t, open('payload.txt', 'r') as s:
+        secret = s.read().strip()
         data = t.read()
-        digest = hmac.new(secret, data, 'sha256').hexdigest()
+        digest = hmac.new(bytes(secret, 'utf-8'), data, 'sha256').hexdigest()
         headers = {
             'X-Build-Signature': 'sha256={}'.format(digest),
             'Content-Type': 'application/octet-stream'
