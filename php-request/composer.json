@@ -1,0 +1,7 @@
+{
+    "require": {
+        "guzzlehttp/guzzle": "^7.0",
+        "vanilla/garden-cli": "~2.0",
+        "alchemy/zippy": "^1.0"
+    }
+}
