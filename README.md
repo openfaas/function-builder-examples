@@ -66,3 +66,24 @@ node nodejs-request/index.js \
     ./hello-world \
     node17
 ```
+
+## Use php to call the pro-builder
+The [php-request](./php-request/) directory has an example on how to invoke the Function Builder API from php. Run the `build.php` script with the required arguments to turn a function handler into a container image.
+
+Install the required packages
+```bash
+cd php-request
+php composer.phar install
+```
+
+The script takes three arguments:
+- The docker image name to build
+- A directory with the handler for the function
+- The language or template to use
+
+```bash
+php php-request/build.php \
+    --image=docker.io/functions/hello-world:0.1.0 \
+    --handler=./hello-world \
+    --lang=node17
+```
