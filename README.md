@@ -83,7 +83,7 @@ The script takes three arguments:
 
 ```bash
 php php-request/build.php \
-    --image=docker.io/functions/hello-world:0.1.0 \
+    --image=ttl.sh/hello-world-php:1h \
     --handler=./hello-world \
     --lang=node17
 ```
