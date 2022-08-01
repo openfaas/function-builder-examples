@@ -87,3 +87,14 @@ php php-request/build.php \
     --handler=./hello-world \
     --lang=node17
 ```
+
+## Use go to call the pro-builder
+The [go-request](./go-request/) directory has an example on how to invoke the Function Builder API from go. Run the `main.go` script with the required flags to turn a function handler into a container image.
+
+Run the script
+```bash
+go run go-request/main.go \
+    -image=ttl.sh/hello-world-go:1h \
+    -handler=./hello-world \
+    -lang=node17
+```
