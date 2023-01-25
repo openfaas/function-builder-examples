@@ -62,7 +62,7 @@ The script takes three arguments:
 
 ```bash
 node nodejs-request/index.js \
-    'ttl.sh/hello-world-node:1h'
+    'ttl.sh/hello-world-node:1h' \
     ./hello-world \
     node17
 ```
