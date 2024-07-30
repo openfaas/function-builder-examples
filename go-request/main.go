@@ -1,199 +1,107 @@
 package main
 
 import (
-	"archive/tar"
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
-	"os/exec"
-	"path"
-	"path/filepath"
 	"strings"
 
-	hmac "github.com/alexellis/hmac/v2"
+	"github.com/openfaas/go-sdk/builder"
 )
 
-type buildConfig struct {
-	Image     string            `json:"image"`
-	BuildArgs map[string]string `json:"buildArgs,omitempty"`
-}
-
-type buildResult struct {
-	Log    []string `json:"log"`
-	Image  string   `json:"image"`
-	Status string   `json:"status"`
-}
-
-const ConfigFileName = "com.openfaas.docker.config"
-
 var (
-	image   string
-	handler string
-	lang    string
+	image        string
+	handler      string
+	lang         string
+	functionName string
+	platformsStr string
+	buildArgsStr string
 )
 
 func main() {
 	flag.StringVar(&image, "image", "", "Docker image name to build")
 	flag.StringVar(&handler, "handler", "", "Directory with handler for function, e.g. handler.js")
-	flag.StringVar(&lang, "lang", "", "Language or template to use, e.g. node17")
+	flag.StringVar(&lang, "lang", "", "Language or template to use, e.g. node20")
+	flag.StringVar(&functionName, "name", "", "Name of the function")
+	flag.StringVar(&platformsStr, "platforms", "linux/amd64", "Comma separated list of target platforms for multi-arch image builds.")
+	flag.StringVar(&buildArgsStr, "build-args", "", "Additional build arguments for the docker build in the form of key1=value1,key2=value2")
 	flag.Parse()
 
-	tempDir, err := os.MkdirTemp(os.TempDir(), "builder-*")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
+	platforms := strings.Split(platformsStr, ",")
+	buildArgs := parseBuildArgs(buildArgsStr)
 
-	tarPath := path.Join(tempDir, "req.tar")
-	fmt.Println(tarPath)
-
-	if err := shrinkwrap(image, handler, lang); err != nil {
-		log.Fatal(err)
-	}
-
-	if err := makeTar(buildConfig{Image: image}, path.Join("build", "context"), tarPath); err != nil {
-		log.Fatalf("Failed to create tar file: %s", err)
-	}
-
-	res, err := callBuilder(tarPath)
-	if err != nil {
-		log.Fatalf("Failed to call builder API: %s", err)
-	}
-	defer res.Body.Close()
-
-	data, _ := io.ReadAll(res.Body)
-
-	result := buildResult{}
-	if err := json.Unmarshal(data, &result); err != nil {
-		log.Fatalf("Failed to unmarshal build result: %s", err)
-	}
-
-	if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusAccepted {
-		log.Fatalf("Unable to build image %s: %s", image, result.Status)
-	}
-
-	log.Printf("Success building image: %s", result.Image)
-}
-
-func shrinkwrap(image, handler, lang string) error {
-	buildCmd := exec.Command(
-		"faas-cli",
-		"build",
-		"--lang",
-		lang,
-		"--handler",
-		handler,
-		"--name",
-		"context",
-		"--image",
-		image,
-		"--shrinkwrap",
-	)
-
-	err := buildCmd.Start()
-	if err != nil {
-		return fmt.Errorf("cannot start faas-cli build: %t", err)
-	}
-
-	err = buildCmd.Wait()
-	if err != nil {
-		return fmt.Errorf("failed to shrinkwrap handler")
-	}
-
-	return nil
-}
-
-func makeTar(buildConfig buildConfig, base, tarPath string) error {
-	configBytes, _ := json.Marshal(buildConfig)
-	if err := ioutil.WriteFile(path.Join(base, ConfigFileName), configBytes, 0664); err != nil {
-		return err
-	}
-
-	tarFile, err := os.Create(tarPath)
-	if err != nil {
-		return err
-	}
-
-	tarWriter := tar.NewWriter(tarFile)
-	defer tarWriter.Close()
-
-	err = filepath.Walk(base, func(path string, f os.FileInfo, pathErr error) error {
-		if pathErr != nil {
-			return pathErr
-		}
-
-		targetFile, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-
-		header, err := tar.FileInfoHeader(f, f.Name())
-		if err != nil {
-			return err
-		}
-
-		header.Name = strings.TrimPrefix(path, base)
-		if header.Name != fmt.Sprintf("/%s", ConfigFileName) {
-			header.Name = filepath.Join("context", header.Name)
-		}
-
-		header.Name = strings.TrimPrefix(header.Name, "/")
-
-		if err := tarWriter.WriteHeader(header); err != nil {
-			return err
-		}
-
-		if f.Mode().IsDir() {
-			return nil
-		}
-
-		_, err = io.Copy(tarWriter, targetFile)
-		return err
-	})
-
-	return err
-}
-
-func callBuilder(tarPath string) (*http.Response, error) {
+	// Get the HMAC secret used for payload authentication with the builder API.
 	payloadSecret, err := os.ReadFile("payload.txt")
 	if err != nil {
-		return nil, err
+		log.Fatal(err)
 	}
+	payloadSecret = bytes.TrimSpace(payloadSecret)
 
-	tarFile, err := os.Open(tarPath)
+	// Initialize a new builder client.
+	builderURL, _ := url.Parse("http://127.0.0.1:8081")
+	b := builder.NewFunctionBuilder(builderURL, http.DefaultClient, builder.WithHmacAuth(string(payloadSecret)))
+
+	// Create the function build context using the provided function handler and language template.
+	buildContext, err := builder.CreateBuildContext(functionName, handler, lang, []string{})
 	if err != nil {
-		return nil, err
+		log.Fatalf("failed to create build context: %s", err)
 	}
-	defer tarFile.Close()
 
-	tarFileBytes, err := ioutil.ReadAll(tarFile)
+	// Create a temporary file for the build tar.
+	tarFile, err := os.CreateTemp(os.TempDir(), "build-context-*.tar")
 	if err != nil {
-		return nil, err
+		log.Fatalf("failed to temporary file: %s", err)
+	}
+	tarFile.Close()
+
+	tarPath := tarFile.Name()
+	defer os.Remove(tarPath)
+
+	// Configuration for the build.
+	// Set the image name plus optional build arguments and target platforms for multi-arch images.
+	buildConfig := builder.BuildConfig{
+		Image:     image,
+		Platforms: platforms,
+		BuildArgs: buildArgs,
 	}
 
-	digest := hmac.Sign(tarFileBytes, bytes.TrimSpace(payloadSecret), sha256.New)
-	fmt.Println(hex.EncodeToString(digest))
+	// Prepare a tar archive that contains the build config and build context.
+	if err := builder.MakeTar(tarPath, buildContext, &buildConfig); err != nil {
+		log.Fatal(err)
+	}
 
-	r, err := http.NewRequest(http.MethodPost, "http://127.0.0.1:8081/build", bytes.NewReader(tarFileBytes))
+	// Invoke the function builder with the tar archive containing the build config and context
+	// to build and push the function image.
+	result, err := b.Build(tarPath)
 	if err != nil {
-		return nil, err
+		log.Fatal(err)
 	}
 
-	r.Header.Set("X-Build-Signature", "sha256="+hex.EncodeToString(digest))
-	r.Header.Set("Content-Type", "application/octet-stream")
+	log.Printf("Image: %s built.", result.Image)
 
-	res, err := http.DefaultClient.Do(r)
-	if err != nil {
-		return nil, err
+	// Print build logs
+	log.Println("Build logs:")
+	for _, logMsg := range result.Log {
+		fmt.Printf("%s\n", logMsg)
+	}
+}
+
+func parseBuildArgs(str string) map[string]string {
+	buildArgs := map[string]string{}
+
+	if str != "" {
+		pairs := strings.Split(str, ",")
+		for _, pair := range pairs {
+			kv := strings.SplitN(pair, "=", 2)
+			if len(kv) == 2 {
+				buildArgs[kv[0]] = kv[1]
+			}
+		}
 	}
 
-	return res, nil
+	return buildArgs
 }

@@ -1,2 +1,4 @@
 github.com/alexellis/hmac/v2 v2.0.0 h1:/sH/UJxDXPpJorUeg2DudeKSeUrWPF32Yamw2TiDoOQ=
 github.com/alexellis/hmac/v2 v2.0.0/go.mod h1:O7hZZgTfh5fp5+vAamzodZPlbw+aQK+nnrrJNHsEvL0=
+github.com/openfaas/go-sdk v0.2.14 h1:N3bq0yparYZR6pR1AhZiPGvV8GAmQ1UfjmCOGaZMs68=
+github.com/openfaas/go-sdk v0.2.14/go.mod h1:DrKUCQ4F8L2cJOmWHNoX8zB8LQIZc/4hRgAtT4t0s4k=
