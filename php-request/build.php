@@ -71,7 +71,7 @@ $cli = new Cli();
 $cli->description('Build a function with the OpenFaaS Pro Builder')
     ->opt('image:i', 'Docker image name to build, e.g. docker.io/functions/hello-world:0.1.0', true)
     ->opt('handler:h', 'Directory with handler for function, e.g. ./hello-world', true)
-    ->opt('lang:l', 'Language or template to use, e.g. node17', true);
+    ->opt('lang:l', 'Language or template to use, e.g. node20', true);
 
 // Parse and return cli args.
 $args        = $cli->parse($argv, true);

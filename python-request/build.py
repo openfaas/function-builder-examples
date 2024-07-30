@@ -57,7 +57,7 @@ parser.add_argument('--image', type=str,
 parser.add_argument('--handler', type=str,
                     help="Directory with handler for function, e.g. handler.js", required=True)
 parser.add_argument('--lang', type=str,
-                    help="Language or template to use, e.g. node17", required=True)
+                    help="Language or template to use, e.g. node20", required=True)
 
 args = parser.parse_args()
 
