@@ -1,5 +1,5 @@
 # OpenFaaS Pro Function Builder API examples
-This repo contains some code examples that show you how to use the [OpenFaaSFunction Builder API](https://docs.openfaas.com/openfaas-pro/builder/) from different languages.
+This repo contains some code examples that show you how to use the [OpenFaaS Function Builder API](https://docs.openfaas.com/openfaas-pro/builder/) from different languages.
 
 > The Function Builder API provides a simple REST API to create your functions from source code.
 > See [Function Builder API docs](https://docs.openfaas.com/openfaas-pro/builder/) for installation instructions
