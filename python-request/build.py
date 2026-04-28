@@ -1,53 +1,8 @@
 import argparse
-import hmac
-import subprocess
-import json
 import os
-import tarfile
-import hmac
-import requests
 import tempfile
 
-def shrinkwrap(image, handler, lang):
-    cmd = [
-        "faas-cli",
-        "build",
-        "--lang",
-        lang,
-        "--handler",
-        handler,
-        "--name",
-        "context",
-        "--image",
-        image,
-        "--shrinkwrap"
-    ]
-
-    completed = subprocess.run(cmd)
-
-    if completed.returncode != 0:
-        raise Exception('Failed to shrinkwrap handler')
-
-
-def makeTar(buildConfig, path, tarFile):
-    configFile = os.path.join(path, 'com.openfaas.docker.config')
-    with open(configFile, 'w') as f:
-        json.dump(buildConfig, f)
-
-    with tarfile.open(tarFile, 'w') as tar:
-        tar.add(configFile, arcname='com.openfaas.docker.config')
-        tar.add(os.path.join(path, "context"), arcname="context")
-
-def callBuilder(tarFile):
-    with open(tarFile, 'rb') as t, open('payload.txt', 'r') as s:
-        secret = s.read().strip()
-        data = t.read()
-        digest = hmac.new(bytes(secret, 'utf-8'), data, 'sha256').hexdigest()
-        headers = {
-            'X-Build-Signature': 'sha256={}'.format(digest),
-            'Content-Type': 'application/octet-stream'
-        }
-        return requests.post("http://127.0.0.1:8081/build", headers=headers, data=data)
+from openfaas_sdk.builder import BuildConfig, FunctionBuilder, create_build_context, make_tar
 
 parser = argparse.ArgumentParser(
     description='Build a function with the OpenFaaS Pro Builder')
@@ -58,23 +13,59 @@ parser.add_argument('--handler', type=str,
                     help="Directory with handler for function, e.g. handler.js", required=True)
 parser.add_argument('--lang', type=str,
                     help="Language or template to use, e.g. node20", required=True)
+parser.add_argument('--name', type=str,
+                    help="Name of the function", required=True)
+parser.add_argument('--platforms', type=str, default='linux/amd64',
+                    help="Comma separated list of target platforms for multi-arch image builds.")
+parser.add_argument('--build-args', type=str, default='',
+                    help="Additional build arguments for the docker build in the form of key1=value1,key2=value2")
+parser.add_argument('--builder-url', type=str, default='http://127.0.0.1:8081',
+                    help="URL for the function builder (default: http://127.0.0.1:8081)")
 
 args = parser.parse_args()
 
-handler = os.path.abspath(args.handler)
-buildConfig = {'image': args.image, 'buildArgs': {}}
+platforms = args.platforms.split(',')
 
-with tempfile.TemporaryDirectory() as tmpdir:
-    tarFile = os.path.join(tmpdir, 'req.tar')
+build_args = {}
+if args.build_args:
+    for pair in args.build_args.split(','):
+        kv = pair.split('=', 1)
+        if len(kv) == 2:
+            build_args[kv[0]] = kv[1]
 
-    shrinkwrap(args.image, handler, args.lang)
-    makeTar(buildConfig, 'build', tarFile)
+# Get the HMAC secret used for payload authentication with the builder API.
+with open('payload.txt', 'r') as f:
+    payload_secret = f.read().strip()
 
-    res = callBuilder(tarFile) 
+# Initialize a new builder client.
+builder = FunctionBuilder(args.builder_url, hmac_secret=payload_secret)
 
-content = res.json()
-if res.status_code != 200:
-    print('Building image {} failed'.format(args.image))
-    print(content['status'])
-else:
-    print('Success building image %s' % content['image'])
+# Create the function build context using the provided function handler and language template.
+build_context = create_build_context(args.name, os.path.abspath(args.handler), args.lang)
+
+with tempfile.NamedTemporaryFile(suffix='.tar', delete=False) as tmp:
+    tar_path = tmp.name
+
+try:
+    # Configuration for the build.
+    # Set the image name plus optional build arguments and target platforms for multi-arch images.
+    build_config = BuildConfig(
+        image=args.image,
+        platforms=platforms,
+        build_args=build_args,
+    )
+
+    # Prepare a tar archive that contains the build config and build context.
+    make_tar(tar_path, build_context, build_config)
+
+    # Invoke the function builder with the tar archive containing the build config and context
+    # to build and push the function image. Stream the build logs as they arrive.
+    result = None
+    for result in builder.build_stream(tar_path):
+        for line in result.log:
+            print(line)
+finally:
+    os.remove(tar_path)
+
+if result:
+    print('Image: {} built.'.format(result.image))

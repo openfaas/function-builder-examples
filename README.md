@@ -28,14 +28,20 @@ faas-cli new hello-world --lang node20
 
 You can use the `faas-cli` to create any other handler to try these example scripts with.
 
-## Use Python to call the pro-builder
+## Use Python and the OpenFaaS python-sdk to call the pro-builder
 
-The [python-request](./python-request/) directory has an example on how to invoke the Function Builder API from python. Run the `build.py` script with the required flags to turn a function handler into a container image.
+The [python-request](./python-request/) directory has an example on how to invoke the Function Builder API from Python using the official OpenFaaS python-sdk. Run the `build.py` script with the required flags to turn a function handler into a container image.
 
-The python script uses the [Requests](https://requests.readthedocs.io/en/latest/) package so you will have to install that to run the example.
+The example script does not fetch templates. How this is done is up to your implementation. Templates can be pulled from a git repository, copied from an S3 bucket, downloaded with an http call.
 
+To try out this example you can fetch them using the faas-cli before running the script:
+```sh
+faas-cli template store pull node20
 ```
-sudo python3 -m pip install requests
+
+Install the required packages
+```bash
+pip install -r python-request/requirements.txt
 ```
 
 Run the script
@@ -43,7 +49,9 @@ Run the script
 python3 python-request/build.py \
     --image ttl.sh/hello-world-python:1h \
     --handler ./hello-world \
-    --lang node20
+    --lang node20 \
+    --name "hello-world" \
+    --platforms "linux/amd64"
 ```
 
 ## Use NodeJS to call the pro-builder

@@ -1,0 +1,1 @@
+openfaas-sdk @ git+https://github.com/openfaas/python-sdk.git
