@@ -20,6 +20,7 @@ var (
 	functionName string
 	platformsStr string
 	buildArgsStr string
+	builderURL   string
 )
 
 func main() {
@@ -29,6 +30,7 @@ func main() {
 	flag.StringVar(&functionName, "name", "", "Name of the function")
 	flag.StringVar(&platformsStr, "platforms", "linux/amd64", "Comma separated list of target platforms for multi-arch image builds.")
 	flag.StringVar(&buildArgsStr, "build-args", "", "Additional build arguments for the docker build in the form of key1=value1,key2=value2")
+	flag.StringVar(&builderURL, "builder-url", "http://127.0.0.1:8081", "URL for the function builder")
 	flag.Parse()
 
 	platforms := strings.Split(platformsStr, ",")
@@ -42,8 +44,11 @@ func main() {
 	payloadSecret = bytes.TrimSpace(payloadSecret)
 
 	// Initialize a new builder client.
-	builderURL, _ := url.Parse("http://127.0.0.1:8081")
-	b := builder.NewFunctionBuilder(builderURL, http.DefaultClient, builder.WithHmacAuth(string(payloadSecret)))
+	u, err := url.Parse(builderURL)
+	if err != nil {
+		log.Fatalf("failed to parse builder URL: %s", err)
+	}
+	b := builder.NewFunctionBuilder(u, http.DefaultClient, builder.WithHmacAuth(string(payloadSecret)))
 
 	// Create the function build context using the provided function handler and language template.
 	buildContext, err := builder.CreateBuildContext(functionName, handler, lang, []string{})
@@ -75,18 +80,26 @@ func main() {
 	}
 
 	// Invoke the function builder with the tar archive containing the build config and context
-	// to build and push the function image.
-	result, err := b.Build(tarPath)
+	// to build and push the function image. Stream the build logs as they arrive.
+	stream, err := b.BuildWithStream(tarPath)
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer stream.Close()
 
-	log.Printf("Image: %s built.", result.Image)
+	var result *builder.BuildResult
+	for r, err := range stream.Results() {
+		if err != nil {
+			log.Fatal(err)
+		}
+		for _, logMsg := range r.Log {
+			fmt.Printf("%s\n", logMsg)
+		}
+		result = &r
+	}
 
-	// Print build logs
-	log.Println("Build logs:")
-	for _, logMsg := range result.Log {
-		fmt.Printf("%s\n", logMsg)
+	if result != nil {
+		log.Printf("Image: %s built.", result.Image)
 	}
 }
 
